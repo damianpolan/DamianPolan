@@ -1,8 +1,18 @@
-FROM golang:1.8-alpine
-ADD . /go/src/hello-app
-RUN go install hello-app
+FROM rust:1.28.0-stretch as builder
 
-FROM alpine:latest
-COPY --from=0 /go/bin/hello-app .
-ENV PORT 8080
-CMD ["./hello-app"]
+# muslc is required in order to build the rust image.
+RUN apt-get update && apt-get -y install ca-certificates cmake musl-tools libssl-dev && rm -rf /var/lib/apt/lists/*
+
+COPY . .
+RUN rustup target add x86_64-unknown-linux-musl
+# Sets the environment variable for the cargo build command that follows.
+ENV PKG_CONFIG_ALLOW_CROSS=1
+RUN cargo build --target x86_64-unknown-linux-musl --release
+
+
+FROM alpine:3.8
+
+RUN apk --no-cache add ca-certificates 
+COPY --from=builder /target/x86_64-unknown-linux-musl/release/rust-actix-web .
+
+CMD ["/rust-actix-web"]
